@@ -14,7 +14,7 @@ public class ConsList {
         record Nil<T>() implements List<T> {
             public <S> S match(
                     Function<Nil<T>, S> nil,
-                    Function<Cons<T>, S> cons) {
+                    BiFunction<Cons<T>, S, S> cons) {
                 return nil.apply(this);
             }
         }
@@ -22,14 +22,14 @@ public class ConsList {
         record Cons<T>(T t, List<T> ts) implements List<T> {
             public <S> S match(
                     Function<Nil<T>, S> nil,
-                    Function<Cons<T>, S> cons) {
-                return cons.apply(this);
+                    BiFunction<Cons<T>, S, S> cons) {
+                return cons.apply(this, ts.match(nil, cons));
             }
         }
 
         <S> S match(
             Function<Nil<T>, S> nil,
-            Function<Cons<T>, S> cons);
+            BiFunction<Cons<T>, S, S> cons);
     }
 
     public static <T> List<T> nil() {
@@ -41,34 +41,33 @@ public class ConsList {
     }
 
     public static <T> int length(List<T> list) {
-        return list.match (
+        return list.match(
             nil -> 0,
-            cons -> length(cons.ts) + 1);
+            (cons, length) -> length + 1);
     }
 
     public static <T> List<T> append(List<T> l1, List<T> l2) {
         return l1.match(
             nil -> l2,
-            cons -> cons(cons.t, append(cons.ts, l2)));
+            (cons, list) -> cons(cons.t, list));
     }
 
     public static <T, S> List<S> map(Function<T, S> f, List<T> list) {
         return list.match (
             nil -> nil(),
-            cons -> cons(f.apply(cons.t), map(f, cons.ts())));
+            (cons, mapped) -> cons(f.apply(cons.t), mapped));
     }
 
     public static <T, S> List<S> flatMap(Function<T, List<S>> f, List<T> list) {
         return list.match (
             nil -> nil(),
-            cons -> append(f.apply(cons.t), flatMap(f, cons.ts))
-        );
+            (cons, mapped) -> append(f.apply(cons.t), mapped));
     }
 
     public static <T, R> R foldl(R r, BiFunction<R, T, R> op, List<T> list) {
         return list.match (
             nil -> r,
-            cons -> foldl(op.apply(r, cons.t), op, cons.ts));
+            (cons, acc) -> op.apply(acc, cons.t));
     }
 
     public static void main(String[] args) {
