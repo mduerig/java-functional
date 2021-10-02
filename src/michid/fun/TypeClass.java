@@ -1,7 +1,7 @@
 package michid.fun;
 
 import static michid.fun.ConsList.cons;
-import static michid.fun.ConsList.foldl;
+import static michid.fun.ConsList.foldr;
 import static michid.fun.ConsList.map;
 import static michid.fun.ConsList.nil;
 
@@ -36,7 +36,7 @@ public class TypeClass {
     }
 
     public static <T> T fold(List<T> ts, Monoid<T> monoid) {
-        return foldl(monoid.unit(), monoid::append, ts);
+        return foldr(monoid.unit(), monoid::append, ts);
     }
 
 /*
