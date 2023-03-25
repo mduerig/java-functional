@@ -2,6 +2,8 @@ package michid.fun;
 
 import java.util.function.Function;
 
+import michid.fun.Free.Nat;
+
 public class Free {
 
     /*
@@ -54,8 +56,6 @@ public class Free {
         static <S> Nat<S> nat(H<Nat, S> hNat) {
             return (Nat<S>) hNat;
         }
-
-        <R> R match(Function<Zero<T>, R> zero, Function<Succ<T>, R> succ);
     }
 
     public static record Zero<T>() implements Nat<T> {
@@ -63,22 +63,12 @@ public class Free {
         public <R> Nat<R> map(Function<T, R> f) {
             return new Zero<>();
         }
-
-        @Override
-        public <R> R match(Function<Zero<T>, R> zero, Function<Succ<T>, R> succ) {
-            return zero.apply(this);
-        }
     }
 
     public static record Succ<T>(T n) implements Nat<T> {
         @Override
         public <R> Nat<R> map(Function<T, R> f) {
             return new Succ<>(f.apply(n));
-        }
-
-        @Override
-        public <R> R match(Function<Zero<T>, R> zero, Function<Succ<T>, R> succ) {
-            return succ.apply(this);
         }
     }
 
@@ -110,9 +100,11 @@ public class Free {
     public static class NatAlg implements Algebra<Nat, Integer> {
         @Override
         public Integer apply(H<Nat, Integer> hNat) {
-            return Nat.nat(hNat).match(
-                zero -> 0,
-                succ -> succ.n + 1);
+            return switch (hNat) {
+                case Zero() -> 0;
+                case Succ(var n) -> n + 1;
+                default -> throw new IllegalStateException();
+            };
         }
     }
 
@@ -133,9 +125,11 @@ public class Free {
     public static class FibAlg implements Algebra<Nat, Tuple<Integer, Integer>> {
         @Override
         public Tuple<Integer, Integer> apply(H<Nat, Tuple<Integer, Integer>> hNat) {
-            return Nat.nat(hNat).match(
-                zero -> new Tuple<>(1, 1),
-                succ -> new Tuple<>(succ.n.q, succ.n.p + succ.n.q));
+            return switch (hNat) {
+                case Zero() -> new Tuple<>(1, 1);
+                case Succ(var n) -> new Tuple<>(n.q, n.p + n.q);
+                default -> throw new IllegalStateException();
+            };
         }
     }
 
@@ -159,18 +153,9 @@ public class Free {
         static <S> Expr<S> expr(H<Expr, S> hExpr) {
             return (Expr<S>) hExpr;
         }
-
-        <R> R match(Function<Const<T>, R> conzt, Function<Add<T>, R> add, Function<Mul<T>, R> mul);
     }
 
     public record Const<T>(int n) implements Expr<T> {
-        @Override
-        public <R> R match(Function<Const<T>, R> conzt,
-                           Function<Add<T>, R> add,
-                           Function<Mul<T>, R> mul) {
-            return conzt.apply(this);
-        }
-
         @Override
         public <R> H<Expr, R> map(Function<T, R> f) {
             return new Const<>(n);
@@ -179,26 +164,12 @@ public class Free {
 
     public record Add<T>(T t1, T t2) implements Expr<T> {
         @Override
-        public <R> R match(Function<Const<T>, R> conzt,
-                           Function<Add<T>, R> add,
-                           Function<Mul<T>, R> mul) {
-            return add.apply(this);
-        }
-
-        @Override
         public <R> H<Expr, R> map(Function<T, R> f) {
             return new Add<>(f.apply(t1), f.apply(t2));
         }
     }
 
     public record Mul<T>(T t1, T t2) implements Expr<T> {
-        @Override
-        public <R> R match(Function<Const<T>, R> conzt,
-                           Function<Add<T>, R> add,
-                           Function<Mul<T>, R> mul) {
-            return mul.apply(this);
-        }
-
         @Override
         public <R> H<Expr, R> map(Function<T, R> f) {
             return new Mul<>(f.apply(t1), f.apply(t2));
@@ -236,10 +207,12 @@ public class Free {
     public static class ExprAlg implements Algebra<Expr, Integer> {
         @Override
         public Integer apply(H<Expr, Integer> hExpr) {
-            return Expr.expr(hExpr).match(
-                conzt -> conzt.n,
-                add   -> add.t1 + add.t2,
-                mul   -> mul.t1 * mul.t2);
+            return switch (hExpr) {
+                case Const(var n) -> n;
+                case Add(var e1, var e2) -> e1 + e2;
+                case Mul(var e1, var e2) -> e1 * e2;
+                default -> throw new IllegalStateException();
+            };
         }
     }
 
@@ -252,10 +225,12 @@ public class Free {
     public static class PrintExprAlg implements Algebra<Expr, String> {
         @Override
         public String apply(H<Expr, String> hExpr) {
-            return Expr.expr(hExpr).match(
-                conzt -> Integer.toString(conzt.n),
-                add   -> add.t1 + " + " + add.t2,
-                mul   -> mul.t1 + " * " + mul.t2);
+            return switch (hExpr) {
+                case Const(var n) -> Integer.toString(n);
+                case Add(var e1, var e2) -> e1 + " + " + e2;
+                case Mul(var e1, var e2) -> e1 + " * " + e2;
+                default -> throw new IllegalStateException();
+            };
         }
     }
 
@@ -264,14 +239,14 @@ public class Free {
 
     public static void main(String[] args) {
         Fix<?, Integer> five = toNat(5);
-        System.out.println(five);
-        System.out.println(evalNat.apply(five));
-        System.out.println(evalFib.apply(five));
+        System.out.println("five=" + five);
+        System.out.println("evalNat(five)=" + evalNat.apply(five));
+        System.out.println("evalFib(five)=" + evalFib.apply(five));
 
         Fix expr = addFix(mulFix(constFix(2), constFix(3)), constFix(4));
-        System.out.println(expr);
-        System.out.println(evalExpr.apply(expr));
-        System.out.println(evalPrintExpr.apply(expr));
+        System.out.println("expr=" + expr);
+        System.out.println("evalExpr(expr)=" + evalExpr.apply(expr));
+        System.out.println("evalPrintExpr(expr)=" + evalPrintExpr.apply(expr));
     }
 
 }
