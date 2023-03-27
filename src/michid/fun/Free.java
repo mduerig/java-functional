@@ -2,17 +2,10 @@ package michid.fun;
 
 import java.util.function.Function;
 
-import michid.fun.Free.Nat;
-
 public class Free {
 
-    /*
-     * Higher order parametricity and Functor
-     */
-    public interface H<F, T> { }
-
     public interface Functor<F, T> {
-        <R> H<F, R> map(Function<T, R> f);
+        <R> Functor<F, R> map(Function<T, R> f);
     }
 
     /*
@@ -20,7 +13,7 @@ public class Free {
      * -- unfix :: Fix f     -> f (Fix f)
      * newtype Fix f = Fix {unfix::f (Fix f)}
      */
-    public record Fix<F extends H<F, T> & Functor<F, T>, T>(F f) {
+    public record Fix<F extends Functor<F, T>, T>(F f) {
         public Functor<F, Fix<F, T>> unfix() {
             return (Functor<F, Fix<F, T>>) f;
         }
@@ -29,14 +22,14 @@ public class Free {
     /*
      * type Algebra f a = f a -> a
      */
-    public interface Algebra<F, T> extends Function<H<F, T>, T> {}
+    public interface Algebra<F, T> extends Function<Functor<F, T>, T> {}
 
     /*
      * -- Catamorphism
      * cata :: Functor f => Algebra f a -> Fix f -> a
      * cata alg = alg . fmap (cata alg) . unfix
      */
-    public static <F extends H<F, T> & Functor<F, T>, T> Function<Fix<F, T>, T> cata(Algebra<F, T> alg) {
+    public static <F extends Functor<F, T>, T> Function<Fix<F, T>, T> cata(Algebra<F, T> alg) {
         return fix -> alg.apply(fix.unfix().map(cata(alg)));
     }
 
@@ -52,8 +45,8 @@ public class Free {
      * succFix :: Fix NatF -> Fix NatF
      * succFix n = Fix (SuccF n)
      */
-    public sealed interface Nat<T> extends H<Nat, T>, Functor<Nat, T> {
-        static <S> Nat<S> nat(H<Nat, S> hNat) {
+    public sealed interface Nat<T> extends Functor<Nat, T> {
+        static <S> Nat<S> nat(Functor<Nat, S> hNat) {
             return (Nat<S>) hNat;
         }
     }
@@ -99,7 +92,7 @@ public class Free {
      */
     public static class NatAlg implements Algebra<Nat, Integer> {
         @Override
-        public Integer apply(H<Nat, Integer> hNat) {
+        public Integer apply(Functor<Nat, Integer> hNat) {
             return switch (hNat) {
                 case Zero() -> 0;
                 case Succ(var n) -> n + 1;
@@ -124,7 +117,7 @@ public class Free {
 
     public static class FibAlg implements Algebra<Nat, Tuple<Integer, Integer>> {
         @Override
-        public Tuple<Integer, Integer> apply(H<Nat, Tuple<Integer, Integer>> hNat) {
+        public Tuple<Integer, Integer> apply(Functor<Nat, Tuple<Integer, Integer>> hNat) {
             return switch (hNat) {
                 case Zero() -> new Tuple<>(1, 1);
                 case Succ(var n) -> new Tuple<>(n.q, n.p + n.q);
@@ -149,29 +142,29 @@ public class Free {
     * | Mul a a
     * deriving (Functor, Show)
     */
-    public sealed interface Expr<T> extends H<Expr, T>, Functor<Expr, T> {
-        static <S> Expr<S> expr(H<Expr, S> hExpr) {
+    public sealed interface Expr<T> extends Functor<Expr, T> {
+        static <S> Expr<S> expr(Functor<Expr, S> hExpr) {
             return (Expr<S>) hExpr;
         }
     }
 
     public record Const<T>(int n) implements Expr<T> {
         @Override
-        public <R> H<Expr, R> map(Function<T, R> f) {
+        public <R> Expr<R> map(Function<T, R> f) {
             return new Const<>(n);
         }
     }
 
     public record Add<T>(T t1, T t2) implements Expr<T> {
         @Override
-        public <R> H<Expr, R> map(Function<T, R> f) {
+        public <R> Expr<R> map(Function<T, R> f) {
             return new Add<>(f.apply(t1), f.apply(t2));
         }
     }
 
     public record Mul<T>(T t1, T t2) implements Expr<T> {
         @Override
-        public <R> H<Expr, R> map(Function<T, R> f) {
+        public <R> Expr<R> map(Function<T, R> f) {
             return new Mul<>(f.apply(t1), f.apply(t2));
         }
     }
@@ -206,7 +199,7 @@ public class Free {
     */
     public static class ExprAlg implements Algebra<Expr, Integer> {
         @Override
-        public Integer apply(H<Expr, Integer> hExpr) {
+        public Integer apply(Functor<Expr, Integer> hExpr) {
             return switch (hExpr) {
                 case Const(var n) -> n;
                 case Add(var e1, var e2) -> e1 + e2;
@@ -224,7 +217,7 @@ public class Free {
 
     public static class PrintExprAlg implements Algebra<Expr, String> {
         @Override
-        public String apply(H<Expr, String> hExpr) {
+        public String apply(Functor<Expr, String> hExpr) {
             return switch (hExpr) {
                 case Const(var n) -> Integer.toString(n);
                 case Add(var e1, var e2) -> e1 + " + " + e2;
