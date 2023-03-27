@@ -20,7 +20,7 @@ public class Free {
      * -- unfix :: Fix f     -> f (Fix f)
      * newtype Fix f = Fix {unfix::f (Fix f)}
      */
-    public static record Fix<F extends H<F, T> & Functor<F, T>, T>(F f) {
+    public record Fix<F extends H<F, T> & Functor<F, T>, T>(F f) {
         public Functor<F, Fix<F, T>> unfix() {
             return (Functor<F, Fix<F, T>>) f;
         }
@@ -58,14 +58,14 @@ public class Free {
         }
     }
 
-    public static record Zero<T>() implements Nat<T> {
+    public record Zero<T>() implements Nat<T> {
         @Override
         public <R> Nat<R> map(Function<T, R> f) {
             return new Zero<>();
         }
     }
 
-    public static record Succ<T>(T n) implements Nat<T> {
+    public record Succ<T>(T n) implements Nat<T> {
         @Override
         public <R> Nat<R> map(Function<T, R> f) {
             return new Succ<>(f.apply(n));
