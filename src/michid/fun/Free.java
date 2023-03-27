@@ -45,11 +45,7 @@ public class Free {
      * succFix :: Fix NatF -> Fix NatF
      * succFix n = Fix (SuccF n)
      */
-    public sealed interface Nat<T> extends Functor<Nat, T> {
-        static <S> Nat<S> nat(Functor<Nat, S> hNat) {
-            return (Nat<S>) hNat;
-        }
-    }
+    public sealed interface Nat<T> extends Functor<Nat, T> { }
 
     public record Zero<T>() implements Nat<T> {
         @Override
@@ -142,11 +138,7 @@ public class Free {
     * | Mul a a
     * deriving (Functor, Show)
     */
-    public sealed interface Expr<T> extends Functor<Expr, T> {
-        static <S> Expr<S> expr(Functor<Expr, S> hExpr) {
-            return (Expr<S>) hExpr;
-        }
-    }
+    public sealed interface Expr<T> extends Functor<Expr, T> { }
 
     public record Const<T>(int n) implements Expr<T> {
         @Override
