@@ -1,6 +1,10 @@
 package michid.fun;
 
+import static java.util.stream.Stream.concat;
+
+import java.util.List;
 import java.util.function.Function;
+import java.util.stream.Stream;
 
 public class Free {
 
@@ -23,6 +27,7 @@ public class Free {
      * type Algebra f a = f a -> a
      */
     public interface Algebra<F, T> extends Function<Functor<F, T>, T> {}
+    public interface CoAlgebra<T, F> extends Function<T, Functor<F, T>> {}
 
     /*
      * -- Catamorphism
@@ -32,6 +37,58 @@ public class Free {
     public static <F extends Functor<F, T>, T> Function<Fix<F, T>, T> cata(Algebra<F, T> alg) {
         return fix -> alg.apply(fix.unfix().map(cata(alg)));
     }
+
+    /*
+     * -- Hylomorphism
+     * hylo :: Functor f => (f b -> b) -> (a -> f a) -> a -> b
+     * hylo f g = f . fmap (hylo f g) . g
+     */
+    public static <F extends Functor<F, A>, A, B> Function<A, B> hylo(Algebra<F, B> f, CoAlgebra<A, F> g) {
+        return a -> f.apply(g.apply(a).map(hylo(f, g)));
+    }
+
+    public sealed interface Tree<T> extends Functor<Tree, T> { }
+
+    public record Leaf<T>() implements Tree<T> {
+        @Override
+        public <R> Tree<R> map(Function<T, R> f) {
+            return new Leaf<>();
+        }
+    }
+
+    public record Branch<T>(T left, int value, T right) implements Tree<T> {
+        @Override
+        public <R> Branch<R> map(Function<T, R> f) {
+            return new Branch<>(f.apply(left), value, f.apply(right));
+        }
+    }
+
+    static class Join implements Algebra<Tree, List<Integer>> {
+        @Override
+        public List<Integer> apply(Functor<Tree, List<Integer>> hTree) {
+            return switch (hTree) {
+                case Leaf() -> List.of();
+                case Branch(var left, var value, var right) ->
+                    concat(concat(left.stream(), Stream.of(value)), right.stream()).toList();
+                default -> throw new IllegalStateException();
+            };
+        }
+    }
+
+    static class Split implements CoAlgebra<List<Integer>, Tree> {
+        @Override
+        public Functor<Tree, List<Integer>> apply(List<Integer> values) {
+            if (values.isEmpty()) {
+                return new Leaf<>();
+            } else {
+                var middle = values.get(0);
+                var left = values.stream().skip(1).filter(v -> v < middle).toList();
+                var right = values.stream().skip(1).filter(v -> v > middle).toList();
+                return new Branch<>(left, middle, right);
+            }
+        }
+    }
+
 
 // -- Natural numbers as fixed point
 
@@ -232,6 +289,10 @@ public class Free {
         System.out.println("expr=" + expr);
         System.out.println("evalExpr(expr)=" + evalExpr.apply(expr));
         System.out.println("evalPrintExpr(expr)=" + evalPrintExpr.apply(expr));
+
+        Function<List<Integer>, List<Integer>> hylo = hylo(new Join(), new Split());
+        List<Integer> sorted = hylo.apply(List.of(5, 3, 9, 2, 1));
+        System.out.println("sorted=" + sorted);
     }
 
 }
