@@ -65,17 +65,15 @@ public class Free {
      * succFix n = Fix (SuccF n)
      */
     public sealed interface Nat<T> extends Functor<T> {
-        record Zero<T>() implements Nat<T> {
-            @Override
-            public <R> Nat<R> map(Function<T, R> f) {
-                return new Zero<>();
-            }
-        }
-        record Succ<T>(T n) implements Nat<T> {
-            @Override
-            public <R> Nat<R> map(Function<T, R> f) {
-                return new Succ<>(f.apply(n));
-            }
+        record Zero<T>() implements Nat<T> { }
+        record Succ<T>(T n) implements Nat<T> { }
+
+        @Override
+        default <R> Nat<R> map(Function<T, R> f) {
+            return switch(this) {
+                case Zero<T>() -> new Zero<>();
+                case Succ<T>(var n) -> new Succ<>(f.apply(n));
+            };
         }
     }
 
@@ -151,25 +149,17 @@ public class Free {
     * deriving (Functor, Show)
     */
     public sealed interface Expr<T> extends Functor<T> {
-       record Const<T>(int n) implements Expr<T> {
-           @Override
-           public <R> Expr<R> map(Function<T, R> f) {
-               return new Const<>(n);
-           }
-       }
+       record Const<T>(int n) implements Expr<T> { }
+       record Add<T>(T t1, T t2) implements Expr<T> { }
+       record Mul<T>(T t1, T t2) implements Expr<T> { }
 
-       record Add<T>(T t1, T t2) implements Expr<T> {
-           @Override
-           public <R> Expr<R> map(Function<T, R> f) {
-               return new Add<>(f.apply(t1), f.apply(t2));
-           }
-       }
-
-       record Mul<T>(T t1, T t2) implements Expr<T> {
-           @Override
-           public <R> Expr<R> map(Function<T, R> f) {
-               return new Mul<>(f.apply(t1), f.apply(t2));
-           }
+       @Override
+       default <R> Functor<R> map(Function<T, R> f) {
+           return switch (this) {
+               case Const<T>(var n) -> new Const<>(n);
+               case Add<T>(var t1, var t2) -> new Add<>(f.apply(t1), f.apply(t2));
+               case Mul<T>(var t1, var t2) -> new Mul<>(f.apply(t1), f.apply(t2));
+           };
        }
    }
 
@@ -243,18 +233,15 @@ public class Free {
     }
 
     public sealed interface Tree<T> extends Functor<T> {
-        record Leaf<T>() implements Tree<T> {
-            @Override
-            public <R> Tree<R> map(Function<T, R> f) {
-                return new Leaf<>();
-            }
-        }
+        record Leaf<T>() implements Tree<T> { }
+        record Branch<T>(T left, int value, T right) implements Tree<T> { }
 
-        record Branch<T>(T left, int value, T right) implements Tree<T> {
-            @Override
-            public <R> Branch<R> map(Function<T, R> f) {
-                return new Branch<>(f.apply(left), value, f.apply(right));
-            }
+        @Override
+        default <R> Functor<R> map(Function<T, R> f) {
+            return switch (this) {
+                case Leaf<T>() -> new Leaf<>();
+                case Branch<T>(var left, var value, var right) -> new Branch<>(f.apply(left), value, f.apply(right));
+            };
         }
     }
 
