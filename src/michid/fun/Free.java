@@ -1,15 +1,24 @@
 package michid.fun;
 
 import static java.util.stream.Stream.concat;
+import static michid.fun.Free.Fix.fix;
 
 import java.util.List;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
+import michid.fun.Free.Expr.Add;
+import michid.fun.Free.Expr.Const;
+import michid.fun.Free.Expr.Mul;
+import michid.fun.Free.Nat.Succ;
+import michid.fun.Free.Nat.Zero;
+import michid.fun.Free.Tree.Branch;
+import michid.fun.Free.Tree.Leaf;
+
 public class Free {
 
-    public interface Functor<F, T> {
-        <R> Functor<F, R> map(Function<T, R> f);
+    public interface Functor<T> {
+        <R> Functor<R> map(Function<T, R> f);
     }
 
     /*
@@ -17,80 +26,33 @@ public class Free {
      * -- unfix :: Fix f     -> f (Fix f)
      * newtype Fix f = Fix {unfix::f (Fix f)}
      */
-    public record Fix<F extends Functor<F, T>, T>(F f) {
-        public Functor<F, Fix<F, T>> unfix() {
-            return (Functor<F, Fix<F, T>>) f;
+    public record Fix<F extends Functor<T>, T>(F f) {
+        public static <T> Fix fix(Functor<T> f) {
+            return new Fix<>(f);
+        }
+
+        public Functor<Fix<F, T>> unfix() {
+            return (Functor<Fix<F, T>>) f;
         }
     }
 
     /*
      * type Algebra f a = f a -> a
+     * type CoAlgebra f a = a -> fa
      */
-    public interface Algebra<F, T> extends Function<Functor<F, T>, T> {}
-    public interface CoAlgebra<T, F> extends Function<T, Functor<F, T>> {}
+    public interface Algebra<T> extends Function<Functor<T>, T> {}
+    public interface CoAlgebra<T> extends Function<T, Functor<T>> {}
 
     /*
      * -- Catamorphism
      * cata :: Functor f => Algebra f a -> Fix f -> a
      * cata alg = alg . fmap (cata alg) . unfix
      */
-    public static <F extends Functor<F, T>, T> Function<Fix<F, T>, T> cata(Algebra<F, T> alg) {
+    public static <F extends Functor<T>, T> Function<Fix<F, T>, T> cata(Algebra<T> alg) {
         return fix -> alg.apply(fix.unfix().map(cata(alg)));
     }
 
-    /*
-     * -- Hylomorphism
-     * hylo :: Functor f => (f b -> b) -> (a -> f a) -> a -> b
-     * hylo f g = f . fmap (hylo f g) . g
-     */
-    public static <F extends Functor<F, A>, A, B> Function<A, B> hylo(Algebra<F, B> f, CoAlgebra<A, F> g) {
-        return a -> f.apply(g.apply(a).map(hylo(f, g)));
-    }
-
-    public sealed interface Tree<T> extends Functor<Tree, T> { }
-
-    public record Leaf<T>() implements Tree<T> {
-        @Override
-        public <R> Tree<R> map(Function<T, R> f) {
-            return new Leaf<>();
-        }
-    }
-
-    public record Branch<T>(T left, int value, T right) implements Tree<T> {
-        @Override
-        public <R> Branch<R> map(Function<T, R> f) {
-            return new Branch<>(f.apply(left), value, f.apply(right));
-        }
-    }
-
-    static class Join implements Algebra<Tree, List<Integer>> {
-        @Override
-        public List<Integer> apply(Functor<Tree, List<Integer>> hTree) {
-            return switch (hTree) {
-                case Leaf() -> List.of();
-                case Branch(var left, var value, var right) ->
-                    concat(concat(left.stream(), Stream.of(value)), right.stream()).toList();
-                default -> throw new IllegalStateException();
-            };
-        }
-    }
-
-    static class Split implements CoAlgebra<List<Integer>, Tree> {
-        @Override
-        public Functor<Tree, List<Integer>> apply(List<Integer> values) {
-            if (values.isEmpty()) {
-                return new Leaf<>();
-            } else {
-                var middle = values.get(0);
-                var left = values.stream().skip(1).filter(v -> v < middle).toList();
-                var right = values.stream().skip(1).filter(v -> v > middle).toList();
-                return new Branch<>(left, middle, right);
-            }
-        }
-    }
-
-
-// -- Natural numbers as fixed point
+    // -- Natural numbers as fixed point
 
     /*
      * data NatF a = ZeroF | SuccF a
@@ -102,39 +64,25 @@ public class Free {
      * succFix :: Fix NatF -> Fix NatF
      * succFix n = Fix (SuccF n)
      */
-    public sealed interface Nat<T> extends Functor<Nat, T> { }
-
-    public record Zero<T>() implements Nat<T> {
-        @Override
-        public <R> Nat<R> map(Function<T, R> f) {
-            return new Zero<>();
+    public sealed interface Nat<T> extends Functor<T> {
+        record Zero<T>() implements Nat<T> {
+            @Override
+            public <R> Nat<R> map(Function<T, R> f) {
+                return new Zero<>();
+            }
+        }
+        record Succ<T>(T n) implements Nat<T> {
+            @Override
+            public <R> Nat<R> map(Function<T, R> f) {
+                return new Succ<>(f.apply(n));
+            }
         }
     }
 
-    public record Succ<T>(T n) implements Nat<T> {
-        @Override
-        public <R> Nat<R> map(Function<T, R> f) {
-            return new Succ<>(f.apply(n));
-        }
-    }
-
-    public static <T> Fix<?, T> zeroF() {
-        return new Fix<>(new Zero<>());
-    }
-
-    public static <T> Fix<?, T> succF(Fix<?, T> n) {
-        return new Fix<>(new Succ<>(n));
-    }
-
-    /*
-     * toNatF :: Int -> Fix NatF
-     * toNatF 0 = zeroFix
-     * toNatF n = succFix (toNatF (n - 1))
-     */
-    public static <T> Fix<?, T> toNat(int n) {
+    public static <T> Fix<Nat<T>, T> toNat(int n) {
         return n == 0
-           ? zeroF()
-           : succF(toNat(n - 1));
+           ? fix(new Zero<>())
+           : fix(new Succ<>(toNat(n - 1)));
     }
 
     /*
@@ -143,10 +91,10 @@ public class Free {
      * nat ZeroF = 0
      * nat (SuccF n) = n + 1
      */
-    public static class NatAlg implements Algebra<Nat, Integer> {
+    public record NatAlg() implements Algebra<Integer> {
         @Override
-        public Integer apply(Functor<Nat, Integer> hNat) {
-            return switch (hNat) {
+        public Integer apply(Functor<Integer> nat) {
+            return switch (nat) {
                 case Zero() -> 0;
                 case Succ(var n) -> n + 1;
                 default -> throw new IllegalStateException();
@@ -158,7 +106,7 @@ public class Free {
      * evalNat :: Fix NatF -> Int
      * evalNat = cata nat
      */
-    public static Function<Fix<?, Integer>, Integer> evalNat = cata(new NatAlg());
+    public static Function<Fix<Nat<Integer>, Integer>, Integer> evalNat = cata(new NatAlg());
 
     /*
      * -- Fibonacci algebra over NatF with carrier (Int, Int)
@@ -168,9 +116,15 @@ public class Free {
      */
     public record Tuple<P, Q>(P p, Q q) {}
 
-    public static class FibAlg implements Algebra<Nat, Tuple<Integer, Integer>> {
+    public static <T> Fix<Nat<Tuple<T, T>>, Tuple<T, T>> toFibNat(int n) {
+        return n == 0
+           ? fix(new Zero<>())
+           : fix(new Succ<>(toNat(n - 1)));
+    }
+
+    public record FibAlg() implements Algebra<Tuple<Integer, Integer>> {
         @Override
-        public Tuple<Integer, Integer> apply(Functor<Nat, Tuple<Integer, Integer>> hNat) {
+        public Tuple<Integer, Integer> apply(Functor<Tuple<Integer, Integer>> hNat) {
             return switch (hNat) {
                 case Zero() -> new Tuple<>(1, 1);
                 case Succ(var n) -> new Tuple<>(n.q, n.p + n.q);
@@ -183,10 +137,11 @@ public class Free {
      * evalFib :: Fix NatF -> (Int, Int)
      * evalFib = cata fib
      */
-    public static Function<Fix<?, Integer>, Tuple<Integer, Integer>> evalFib = cata(new FibAlg());
+    public static Function<Fix<Nat<Tuple<Integer, Integer>>, Tuple<Integer, Integer>>, Tuple<Integer, Integer>> evalFib
+        = cata(new FibAlg());
 
 
-// -- Simple expression algebra
+    // -- Simple expression algebra
 
    /*
     * data ExprF a
@@ -195,28 +150,28 @@ public class Free {
     * | Mul a a
     * deriving (Functor, Show)
     */
-    public sealed interface Expr<T> extends Functor<Expr, T> { }
+    public sealed interface Expr<T> extends Functor<T> {
+       record Const<T>(int n) implements Expr<T> {
+           @Override
+           public <R> Expr<R> map(Function<T, R> f) {
+               return new Const<>(n);
+           }
+       }
 
-    public record Const<T>(int n) implements Expr<T> {
-        @Override
-        public <R> Expr<R> map(Function<T, R> f) {
-            return new Const<>(n);
-        }
-    }
+       record Add<T>(T t1, T t2) implements Expr<T> {
+           @Override
+           public <R> Expr<R> map(Function<T, R> f) {
+               return new Add<>(f.apply(t1), f.apply(t2));
+           }
+       }
 
-    public record Add<T>(T t1, T t2) implements Expr<T> {
-        @Override
-        public <R> Expr<R> map(Function<T, R> f) {
-            return new Add<>(f.apply(t1), f.apply(t2));
-        }
-    }
-
-    public record Mul<T>(T t1, T t2) implements Expr<T> {
-        @Override
-        public <R> Expr<R> map(Function<T, R> f) {
-            return new Mul<>(f.apply(t1), f.apply(t2));
-        }
-    }
+       record Mul<T>(T t1, T t2) implements Expr<T> {
+           @Override
+           public <R> Expr<R> map(Function<T, R> f) {
+               return new Mul<>(f.apply(t1), f.apply(t2));
+           }
+       }
+   }
 
     /*
     * constFix :: Int -> Fix ExprF
@@ -229,15 +184,15 @@ public class Free {
     * mulFix a b = Fix (Mul a b)
     */
     public static <T> Fix<?, T> constFix(int n) {
-        return new Fix<>(new Const<>(n));
+        return fix(new Const<>(n));
     }
 
     public static <T> Fix<?, T> addFix(Fix<?, T> t1, Fix<?, T> t2) {
-        return new Fix<>(new Add<>(t1, t2));
+        return fix(new Add<>(t1, t2));
     }
 
     public static <T> Fix<?, T> mulFix(Fix<?, T> t1, Fix<?, T> t2) {
-        return new Fix<>(new Mul<>(t1, t2));
+        return fix(new Mul<>(t1, t2));
     }
 
    /*
@@ -246,9 +201,9 @@ public class Free {
     * evalExprF (Add m n) = m + n
     * evalExprF (Mul m n) = m * n
     */
-    public static class ExprAlg implements Algebra<Expr, Integer> {
+    public static class ExprAlg implements Algebra<Integer> {
         @Override
-        public Integer apply(Functor<Expr, Integer> hExpr) {
+        public Integer apply(Functor<Integer> hExpr) {
             return switch (hExpr) {
                 case Const(var n) -> n;
                 case Add(var e1, var e2) -> e1 + e2;
@@ -262,11 +217,11 @@ public class Free {
     * evalExpr :: Fix ExprF -> Int
     * evalExpr = cata evalExprF
     */
-    public static Function<Fix<?, Integer>, Integer> evalExpr = cata(new ExprAlg());
+    public static Function<Fix<Expr<Integer>, Integer>, Integer> evalExpr = cata(new ExprAlg());
 
-    public static class PrintExprAlg implements Algebra<Expr, String> {
+    public static class PrintExprAlg implements Algebra<String> {
         @Override
-        public String apply(Functor<Expr, String> hExpr) {
+        public String apply(Functor<String> hExpr) {
             return switch (hExpr) {
                 case Const(var n) -> Integer.toString(n);
                 case Add(var e1, var e2) -> e1 + " + " + e2;
@@ -276,14 +231,66 @@ public class Free {
         }
     }
 
-    public static Function<Fix<?, String>, String> evalPrintExpr = cata(new PrintExprAlg());
+    public static Function<Fix<Expr<String>, String>, String> evalPrintExpr = cata(new PrintExprAlg());
 
+    /*
+     * -- Hylomorphism
+     * hylo :: Functor f => (f b -> b) -> (a -> f a) -> a -> b
+     * hylo f g = f . fmap (hylo f g) . g
+     */
+    public static <F extends Functor<A>, A, B> Function<A, B> hylo(Algebra<B> f, CoAlgebra<A> g) {
+        return a -> f.apply(g.apply(a).map(hylo(f, g)));
+    }
+
+    public sealed interface Tree<T> extends Functor<T> {
+        record Leaf<T>() implements Tree<T> {
+            @Override
+            public <R> Tree<R> map(Function<T, R> f) {
+                return new Leaf<>();
+            }
+        }
+
+        record Branch<T>(T left, int value, T right) implements Tree<T> {
+            @Override
+            public <R> Branch<R> map(Function<T, R> f) {
+                return new Branch<>(f.apply(left), value, f.apply(right));
+            }
+        }
+    }
+
+    record Join() implements Algebra<List<Integer>> {
+        @Override
+        public List<Integer> apply(Functor<List<Integer>> hTree) {
+            return switch (hTree) {
+                case Leaf() -> List.of();
+                case Branch(var left, var value, var right) ->
+                    concat(concat(left.stream(), Stream.of(value)), right.stream()).toList();
+                default -> throw new IllegalStateException();
+            };
+        }
+    }
+
+    record Split() implements CoAlgebra<List<Integer>> {
+        @Override
+        public Functor<List<Integer>> apply(List<Integer> values) {
+            if (values.isEmpty()) {
+                return new Leaf<>();
+            } else {
+                var middle = values.get(0);
+                var left = values.stream().skip(1).filter(v -> v < middle).toList();
+                var right = values.stream().skip(1).filter(v -> v > middle).toList();
+                return new Branch<>(left, middle, right);
+            }
+        }
+    }
 
     public static void main(String[] args) {
-        Fix<?, Integer> five = toNat(5);
-        System.out.println("five=" + five);
-        System.out.println("evalNat(five)=" + evalNat.apply(five));
-        System.out.println("evalFib(five)=" + evalFib.apply(five));
+        Fix<Nat<Integer>, Integer> natFive = toNat(5);
+        System.out.println("five=" + natFive);
+        System.out.println("evalNat(five)=" + evalNat.apply(natFive));
+
+        Fix<Nat<Tuple<Integer, Integer>>, Tuple<Integer, Integer>> fibFive = toFibNat(5);
+        System.out.println("evalFib(five)=" + evalFib.apply(fibFive));
 
         Fix expr = addFix(mulFix(constFix(2), constFix(3)), constFix(4));
         System.out.println("expr=" + expr);
