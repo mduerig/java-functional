@@ -14,12 +14,12 @@ import michid.fun.fix.Hylomorphism.Tree.Leaf;
 
 public class Hylomorphism {
 
-    public sealed interface Tree<T> extends Functor<T> {
+    public sealed interface Tree<T> extends Functor<Tree<T>, T> {
         record Leaf<T>() implements Tree<T> { }
         record Branch<T>(T left, int value, T right) implements Tree<T> { }
 
         @Override
-        default <R> Functor<R> map(Function<T, R> f) {
+        default <S> Tree<S> map(Function<T, S> f) {
             return switch (this) {
                 case Leaf<T>() -> new Leaf<>();
                 case Branch<T>(var left, var value, var right) -> new Branch<>(f.apply(left), value, f.apply(right));
@@ -27,9 +27,9 @@ public class Hylomorphism {
         }
     }
 
-    record Split() implements CoAlgebra<List<Integer>> {
+    record Split() implements CoAlgebra<Tree<List<Integer>>, List<Integer>> {
         @Override
-        public Functor<List<Integer>> apply(List<Integer> values) {
+        public Tree<List<Integer>> apply(List<Integer> values) {
             if (values.isEmpty()) {
                 return new Leaf<>();
             } else {
@@ -41,14 +41,13 @@ public class Hylomorphism {
         }
     }
 
-    record Join() implements Algebra<List<Integer>> {
+    record Join() implements Algebra<Tree<List<Integer>>, List<Integer>> {
         @Override
-        public List<Integer> apply(Functor<List<Integer>> hTree) {
-            return switch (hTree) {
+        public List<Integer> apply(Tree<List<Integer>> tree) {
+            return switch (tree) {
                 case Leaf() -> List.of();
                 case Branch(var left, var value, var right) ->
                     concat(concat(left.stream(), Stream.of(value)), right.stream()).toList();
-                default -> throw new IllegalStateException();
             };
         }
     }
@@ -58,8 +57,8 @@ public class Hylomorphism {
      * hylo :: Functor f => (f b -> b) -> (a -> f a) -> a -> b
      * hylo f g = f . fmap (hylo f g) . g
      */
-    public static <F extends Functor<A>, A, B> Function<A, B> hylo(Algebra<B> f, CoAlgebra<A> g) {
-        return a -> f.apply(g.apply(a).map(hylo(f, g)));
+    public static <A, B> Function<A, B> hylo(Algebra<Tree<B>, B> alg, CoAlgebra<Tree<A>, A> coAlg) {
+        return a -> alg.apply(coAlg.apply(a).map(hylo(alg, coAlg)));
     }
 
     public static Function<List<Integer>, List<Integer>> quicksort = hylo(new Join(), new Split());

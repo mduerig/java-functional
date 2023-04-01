@@ -23,15 +23,15 @@ public class Naturals {
      * succFix :: Fix NatF -> Fix NatF
      * succFix n = Fix (SuccF n)
      */
-    public sealed interface Nat<T> extends Functor<T> {
+    public sealed interface Nat<T> extends Functor<Nat<T>, T> {
         record Zero<T>() implements Nat<T> { }
         record Succ<T>(T n) implements Nat<T> { }
 
         @Override
         default <R> Nat<R> map(Function<T, R> f) {
-            return switch(this) {
-                case Zero<T>() -> new Zero<>();
-                case Succ<T>(var n) -> new Succ<>(f.apply(n));
+            return switch (this) {
+                case Zero() -> new Zero<>();
+                case Succ(var n) -> new Succ<>(f.apply(n));
             };
         }
     }
@@ -42,21 +42,20 @@ public class Naturals {
      * nat ZeroF = 0
      * nat (SuccF n) = n + 1
      */
-    public record NatAlg() implements Algebra<Integer> {
+    public record NatAlg() implements Algebra<Nat<Integer>, Integer> {
         @Override
-        public Integer apply(Functor<Integer> nat) {
+        public Integer apply(Nat<Integer> nat) {
             return switch (nat) {
-                case Zero() -> 0;
-                case Succ(var n) -> n + 1;
-                default -> throw new IllegalStateException();
+                case Zero<Integer>() -> 0;
+                case Succ<Integer>(var n) -> n + 1;
             };
         }
     }
 
     public static <T> Fix<Nat<T>, T> toNat(int n) {
         return n == 0
-               ? fix(new Zero<>())
-               : fix(new Succ<>(toNat(n - 1)));
+           ? fix(new Zero<>())
+           : fix((Nat<T>) new Succ<>(toNat(n - 1)));
     }
 
     /**
@@ -74,13 +73,12 @@ public class Naturals {
      * fib (SuccF (m, n)) = (n, n + m)
      */
     public record Tuple<P, Q>(P p, Q q) {}
-    public record FibAlg() implements Algebra<Tuple<Integer, Integer>> {
+    public record FibAlg() implements Algebra<Nat<Tuple<Integer, Integer>>, Tuple<Integer, Integer>> {
         @Override
-        public Tuple<Integer, Integer> apply(Functor<Tuple<Integer, Integer>> hNat) {
-            return switch (hNat) {
+        public Tuple<Integer, Integer> apply(Nat<Tuple<Integer, Integer>> nat) {
+            return switch (nat) {
                 case Zero() -> new Tuple<>(1, 1);
                 case Succ(var n) -> new Tuple<>(n.q, n.p + n.q);
-                default -> throw new IllegalStateException();
             };
         }
     }
@@ -88,7 +86,7 @@ public class Naturals {
     public static <T> Fix<Nat<Tuple<T, T>>, Tuple<T, T>> toFibNat(int n) {
         return n == 0
                ? fix(new Zero<>())
-               : fix(new Succ<>(toNat(n - 1)));
+               : fix((Nat) new Succ<>(toFibNat(n - 1)));
     }
 
     /**
