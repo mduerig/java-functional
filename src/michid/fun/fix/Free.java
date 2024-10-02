@@ -65,6 +65,10 @@ public class Free {
 
         List<Integer> sorted = quicksort.apply(List.of(5, 3, 9, 2, 1));
         System.out.println("sorted=" + sorted);
+
+        Fix<Lists.ConsList<Integer>, Integer> list = Lists.consFix(3, Lists.consFix(2, Lists.consFix(1, Lists.nilFix())));
+        System.out.println("list=" + list);
+        System.out.println("evalList(list)=" + Lists.evalListSum.apply(list));
     }
 
 }
